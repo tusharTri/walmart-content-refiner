@@ -5,7 +5,7 @@ import pandas as pd
 import tempfile
 import os
 from app.models import ProductInput, ProductOutput
-from app.services.refiner_service import refine_product
+from app.services.refiner_service import refine_product, fix_output_violations
 from app.services.data_loader import load_csv, save_csv
 from app.config import get_settings, get_logger, Settings
 from app.services.report import generate_report
@@ -81,6 +81,17 @@ async def refine_batch(
     except Exception as e:
         logger.exception("Batch refine failed")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/refine/fix", response_model=ProductOutput)
+def refine_fix(payload: dict, settings: Settings = Depends(get_settings)) -> ProductOutput:
+    try:
+        original = payload.get("original") or {}
+        violations = payload.get("violations") or []
+        brand = payload.get("brand") or ""
+        return fix_output_violations(original, violations, brand)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/report")
