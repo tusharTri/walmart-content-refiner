@@ -46,8 +46,23 @@ A minimal FastAPI-based service to refine Walmart product content in batch or vi
 1. Create and populate `.env` from `.env.example`.
 2. Install dependencies: `python -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
 3. Run API: `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
-4. Run batch: `python run_batch.py --input sample_input.csv --output output.csv`
+4. Run tests: `pytest -q`
+5. Run batch: `python run_batch.py sample_input.csv sample_output.csv`
+6. Run Streamlit UI: `streamlit run app/ui_streamlit.py`
 
 ## Docker
 Build: `docker build -t walmart-content-refiner .`
 Run: `docker run --env-file .env -p 8000:8000 walmart-content-refiner`
+
+## Architecture (textual)
+- FastAPI service exposes `/refine`, `/refine-batch`, `/report`
+- Rule-based refiner applies constraints offline (no external LLM calls)
+- Batch runner processes CSV and emits refined outputs
+- Validator enforces business rules and aggregates violations
+- Streamlit UI for local inspection and export
+
+## CI
+GitHub Actions at `.github/workflows/ci.yaml` installs deps and runs pytest on pushes/PRs.
+
+## Security
+- Never commit API keys. Use `.env` with `OPENAI_API_KEY` if you later add LLMs.
