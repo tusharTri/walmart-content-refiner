@@ -1,25 +1,45 @@
 import argparse
-from app.services.data_loader import load_csv, write_csv
+import json
+from tqdm import tqdm
+from app.services.data_loader import load_csv, save_csv
 from app.services.refiner_service import refine_product
-from app.services.validator import validate_required_fields
+from app.models import ProductInput
+from app.config import get_logger
 
 
 def main():
+    logger = get_logger()
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
-    rows = load_csv(args.input)
-    issues = validate_required_fields(rows, ["product_id", "title", "description"])
-    if issues:
-        for issue in issues:
-            print(f"Row {issue.row_index} - {issue.field}: {issue.message}")
-        print("Validation issues found; continuing to refine anyway.")
+    df = load_csv(args.input)
+    outputs = []
 
-    refined = [refine_product(r) for r in rows]
-    write_csv(args.output, refined)
-    print(f"Wrote {len(refined)} rows to {args.output}")
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        inp = ProductInput(
+            brand=row.get("brand", ""),
+            product_type=row.get("product_type", ""),
+            attributes=row.get("attributes", {}),
+            current_description=row.get("current_description", ""),
+            current_bullets=row.get("current_bullets", []),
+        )
+        out = refine_product(inp)
+        outputs.append({
+            "refined_title": out.title,
+            "refined_bullets": json.dumps(out.bullets, ensure_ascii=False),
+            "refined_description": out.description,
+            "meta_title": out.meta_title,
+            "meta_description": out.meta_description,
+            "violations": "; ".join(out.violations),
+        })
+
+    # Append new columns to original DataFrame
+    import pandas as pd
+    out_df = pd.concat([df.reset_index(drop=True), pd.DataFrame(outputs)], axis=1)
+    save_csv(out_df, args.output)
+    logger.info("Wrote %d rows to %s", len(out_df), args.output)
 
 
 if __name__ == "__main__":
