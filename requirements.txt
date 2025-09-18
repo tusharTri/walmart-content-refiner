@@ -1,8 +1,9 @@
 fastapi
 uvicorn
 pandas
-openai
 pydantic
 pytest
 python-dotenv
 streamlit
+tqdm
+matplotlib

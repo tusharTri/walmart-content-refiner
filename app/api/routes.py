@@ -8,6 +8,7 @@ from app.models import ProductInput, ProductOutput
 from app.services.refiner_service import refine_product
 from app.services.data_loader import load_csv, save_csv
 from app.config import get_settings, get_logger, Settings
+from app.services.report import generate_report
 
 router = APIRouter()
 
@@ -79,4 +80,34 @@ async def refine_batch(
         raise
     except Exception as e:
         logger.exception("Batch refine failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/report")
+async def report(
+    csv_url: Optional[str] = None,
+    file: Optional[UploadFile] = File(default=None),
+    settings: Settings = Depends(get_settings),
+):
+    logger = get_logger()
+    try:
+        if not csv_url and not file:
+            raise HTTPException(status_code=400, detail="Provide csv_url or file upload")
+        work_dir = tempfile.mkdtemp(prefix="report-")
+        input_path = os.path.join(work_dir, "input.csv")
+        if file:
+            content = await file.read()
+            with open(input_path, "wb") as f:
+                f.write(content)
+        else:
+            if not os.path.exists(csv_url):
+                raise HTTPException(status_code=400, detail="csv_url not found on local filesystem")
+            input_path = csv_url
+        df = load_csv(input_path)
+        summary, chart_path = generate_report(df)
+        return JSONResponse(status_code=200, content={"summary": summary, "chart_path": chart_path})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Report generation failed")
         raise HTTPException(status_code=500, detail=str(e))

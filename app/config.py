@@ -1,5 +1,6 @@
 from pydantic import BaseSettings
 import logging
+import json as _json
 
 
 class Settings(BaseSettings):
@@ -22,13 +23,25 @@ def get_logger(name: str = "walmart-content-refiner") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            fmt="%(asctime)s %(levelname)s %(name)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        handler.setFormatter(formatter)
+        class JsonFormatter(logging.Formatter):
+            def format(self, record: logging.LogRecord) -> str:
+                payload = {
+                    "ts": self.formatTime(record, datefmt="%Y-%m-%dT%H:%M:%S"),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                }
+                return _json.dumps(payload, ensure_ascii=False)
+        handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
     settings = get_settings()
     level = getattr(logging, (settings.log_level or "INFO").upper(), logging.INFO)
     logger.setLevel(level)
     return logger
+
+# Placeholders for external logging providers
+def get_sentry_client():
+    return None
+
+def get_cloud_logger():
+    return None

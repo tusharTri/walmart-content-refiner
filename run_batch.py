@@ -10,8 +10,8 @@ from app.config import get_logger
 def main():
     logger = get_logger()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", required=True)
-    parser.add_argument("--output", required=True)
+    parser.add_argument("input", help="Input CSV path")
+    parser.add_argument("output", help="Output CSV path")
     args = parser.parse_args()
 
     df = load_csv(args.input)
