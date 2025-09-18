@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from app.api.routes import router
-from app.config import get_settings
+from app.config import get_settings, get_logger
 
 settings = get_settings()
+logger = get_logger()
 app = FastAPI(title="Walmart Content Refiner")
 
-app.include_router(router, prefix="/api")
+app.include_router(router)
 
 
 @app.get("/")
-def health() -> dict:
-    return {"status": "ok", "log_level": settings.log_level}
+def root() -> dict:
+    return {"message": "Walmart Content Refiner API"}
