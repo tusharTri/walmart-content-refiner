@@ -1,7 +1,11 @@
-from typing import List, Tuple
+from typing import List, Optional
 import re
 
+# Banned terms Walmart does not allow
 BANNED_WORDS = ["cosplay", "weapon", "knife", "uv", "premium", "perfect"]
+
+# Regex patterns that indicate medical claims
+MEDICAL_PATTERNS = [r"\bcure\b", r"\btreat\b", r"\bdiagnose\b", r"\bprevent\b"]
 
 
 def count_words(text: str) -> int:
@@ -13,18 +17,13 @@ def check_banned_words(text: str) -> List[str]:
     if not text:
         return []
     lower = text.lower()
-    found = []
-    for w in BANNED_WORDS:
-        if re.search(rf"\b{re.escape(w)}\b", lower):
-            found.append(w)
-    return found
+    return [w for w in BANNED_WORDS if re.search(rf"\b{re.escape(w)}\b", lower)]
 
 
-def validate_title(title: str, brand: str | None = None) -> List[str]:
+def validate_title(title: str, brand: Optional[str] = None) -> List[str]:
     violations: List[str] = []
-    if title is None or not title.strip():
-        violations.append("title is empty")
-        return violations
+    if not title or not title.strip():
+        return ["title is empty"]
     if len(title) > 150:
         violations.append("title exceeds 150 characters")
     if brand and brand.lower() not in title.lower():
@@ -35,9 +34,8 @@ def validate_title(title: str, brand: str | None = None) -> List[str]:
 
 def validate_meta_title(meta_title: str) -> List[str]:
     violations: List[str] = []
-    if meta_title is None or not meta_title.strip():
-        violations.append("meta_title is empty")
-        return violations
+    if not meta_title or not meta_title.strip():
+        return ["meta_title is empty"]
     if len(meta_title) > 70:
         violations.append("meta_title exceeds 70 characters")
     violations.extend([f"banned word in meta_title: {w}" for w in check_banned_words(meta_title)])
@@ -46,16 +44,15 @@ def validate_meta_title(meta_title: str) -> List[str]:
 
 def validate_meta_desc(meta_desc: str) -> List[str]:
     violations: List[str] = []
-    if meta_desc is None or not meta_desc.strip():
-        violations.append("meta_description is empty")
-        return violations
+    if not meta_desc or not meta_desc.strip():
+        return ["meta_description is empty"]
     if len(meta_desc) > 160:
         violations.append("meta_description exceeds 160 characters")
     violations.extend([f"banned word in meta_description: {w}" for w in check_banned_words(meta_desc)])
     return violations
 
 
-def validate_description_length(description: str, brand: str | None = None) -> List[str]:
+def validate_description_length(description: str, brand: Optional[str] = None) -> List[str]:
     violations: List[str] = []
     wc = count_words(description or "")
     if wc < 120 or wc > 160:
@@ -66,61 +63,76 @@ def validate_description_length(description: str, brand: str | None = None) -> L
     return violations
 
 
-def validate_bullets(bullets_list: List[str]) -> List[str]:
+def validate_bullets(bullets_str: str) -> List[str]:
     violations: List[str] = []
-    if not isinstance(bullets_list, list):
-        return ["bullets is not a list"]
-    if len(bullets_list) != 8:
-        violations.append("bullets must contain exactly 8 items")
-    for idx, b in enumerate(bullets_list):
-        if len(b or "") > 85:
+    if not bullets_str or not isinstance(bullets_str, str):
+        return ["bullets is empty or not a string"]
+
+    # Extract <li> items
+    li_pattern = r'<li[^>]*>(.*?)</li>'
+    li_matches = re.findall(li_pattern, bullets_str, re.IGNORECASE | re.DOTALL)
+
+    if len(li_matches) != 8:
+        violations.append(f"bullets must contain exactly 8 items, found {len(li_matches)}")
+
+    for idx, bullet_content in enumerate(li_matches):
+        if len(bullet_content.strip()) > 85:
             violations.append(f"bullet {idx+1} exceeds 85 characters")
-        violations.extend([f"banned word in bullet {idx+1}: {w}" for w in check_banned_words(b or "")])
+        violations.extend([f"banned word in bullet {idx+1}: {w}" for w in check_banned_words(bullet_content)])
+
     return violations
 
 
-MEDICAL_PATTERNS = [r"\bcure\b", r"\btreat\b", r"\bdiagnose\b", r"\bprevent\b"]
-
-
 def validate_no_medical_claims(text: str) -> List[str]:
+    """Detect medical claims in text and report which pattern was matched."""
     if not text:
         return []
     lower = text.lower()
-    v = []
+    violations = []
     for pat in MEDICAL_PATTERNS:
         if re.search(pat, lower):
-            v.append("medical claim detected")
-            break
-    return v
+            # Clean pattern for human-readable message
+            label = re.sub(r"\\b", "", pat)
+            violations.append(f"medical claim detected: {label}")
+    return violations
 
 
-def validate_product_output(output_dict: dict, input_keywords: List[str] | None, brand: str | None) -> List[str]:
+def validate_product_output(output_dict: dict, input_keywords: Optional[List[str]], brand: Optional[str]) -> List[str]:
     violations: List[str] = []
+
     title = output_dict.get("title", "")
-    bullets = output_dict.get("bullets", [])
+    bullets = output_dict.get("bullets", "")
     description = output_dict.get("description", "")
     meta_title = output_dict.get("meta_title", "")
     meta_description = output_dict.get("meta_description", "")
 
+    # Run validations
     violations.extend(validate_title(title, brand))
     violations.extend(validate_bullets(bullets))
     violations.extend(validate_description_length(description, brand))
     violations.extend(validate_meta_title(meta_title))
     violations.extend(validate_meta_desc(meta_description))
-    violations.extend(validate_no_medical_claims(" ".join([title, description, meta_title, meta_description] + list(bullets or []))))
 
-    # Keyword presence (attributes/keywords) check - soft requirement, but record if missing
+    # Extract bullet text for medical + keyword checks
+    bullet_content = ""
+    if bullets:
+        li_pattern = r'<li[^>]*>(.*?)</li>'
+        li_matches = re.findall(li_pattern, bullets, re.IGNORECASE | re.DOTALL)
+        bullet_content = " ".join(li_matches)
+
+    violations.extend(validate_no_medical_claims(" ".join([title, description, meta_title, meta_description, bullet_content])))
+
+    # Keyword presence check
     if input_keywords:
-        joined = " ".join([title, description] + list(bullets or []))).lower()
+        joined = (" ".join([title, description, bullet_content])).lower()
         for kw in input_keywords:
             if kw and str(kw).lower() not in joined:
                 violations.append(f"keyword not present: {kw}")
 
-    # Banned words at overall level already included in other checks
     return violations
 
 
-# Backwards-compatible function kept for tests that rely on it
+# For backwards compatibility in tests
 def validate_required_fields(rows: List[dict], required_fields: List[str]):
     issues = []
     for idx, row in enumerate(rows):

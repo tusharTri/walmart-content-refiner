@@ -1,12 +1,13 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 import logging
 import json as _json
+from typing import Optional
 
 
 class Settings(BaseSettings):
-    openai_api_key: str | None = None
-    cloud_bucket: str | None = None
-    gcp_project: str | None = None
+    gemini_api_key: Optional[str] = None
+    cloud_bucket: Optional[str] = None
+    gcp_project: Optional[str] = None
     log_level: str = "INFO"
 
     class Config:

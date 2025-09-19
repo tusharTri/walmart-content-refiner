@@ -30,3 +30,4 @@ def generate_report(df: pd.DataFrame) -> Tuple[Dict[str, int], str]:
     return counts, chart_path
 
 
+

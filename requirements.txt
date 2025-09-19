@@ -2,8 +2,10 @@ fastapi
 uvicorn
 pandas
 pydantic
+pydantic-settings
 pytest
 python-dotenv
 streamlit
 tqdm
 matplotlib
+google-generativeai

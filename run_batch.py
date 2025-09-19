@@ -28,7 +28,7 @@ def main():
         out = refine_product(inp)
         outputs.append({
             "refined_title": out.title,
-            "refined_bullets": json.dumps(out.bullets, ensure_ascii=False),
+            "refined_bullets": out.bullets,  # Now a single HTML string, not JSON array
             "refined_description": out.description,
             "meta_title": out.meta_title,
             "meta_description": out.meta_description,

@@ -1,3 +1,25 @@
-product_id,title,description,category
-1001,Sample Product,This is a sample description,General
-1002,Another Item,Another description,Electronics
+brand,product_type,attributes,current_description,current_bullets
+BrandCo,Kitchen Appliance,"{""Color"": ""Stainless Steel"", ""Material"": ""Plastic"", ""Dimensions"": ""12x8x10 inches"", ""Weight"": ""5 lbs""}","This is a great premium blender. It is perfect for making smoothies, shakes, and sauces. Its powerful motor can handle anything you throw at it. It is also a good kitchen weapon. It also has UV protection and a blade that is as sharp as a knife.","- 1200W motor
+- 6-blade design
+- UV protected jar
+- 5-speed control
+- Dishwasher safe parts
+- Premium quality
+- Perfect for shakes
+- 5-year warranty"
+TechGadget,Electronic Accessory,"{""Color"": ""Black"", ""Compatibility"": ""All Smartphones"", ""Features"": ""Fast Charging, Wireless""}",This is the perfect fast charger for all your devices. It uses advanced technology to give you a premium charging experience. It is a good option to wear at your cosplay event. It also has UV protection for charging outside.,"- Wireless charging
+- Fast charging technology
+- Universal compatibility
+- Sleek design
+- UV protection
+- Cosplay-friendly
+- Premium materials
+- 2-year warranty"
+OutdoorsGear,Camping Equipment,"{""Color"": ""Green"", ""Material"": ""Nylon"", ""Features"": ""Waterproof, Lightweight""}",This is a great tent for your camping needs. It is lightweight and easy to carry. It has a great design and is UV protected. It also has a knife that comes with it.,"- Waterproof
+- Lightweight
+- Easy setup
+- UV protection
+- Includes a knife
+- Fits 2 people
+- Perfect for camping
+- 1-year warranty"

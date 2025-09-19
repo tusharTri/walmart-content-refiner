@@ -6,9 +6,9 @@ import json
 class ProductInput(BaseModel):
     brand: str
     product_type: str = Field(..., description="Product type or category name")
-    attributes: Dict[str, Any] | str = Field(default_factory=dict)
+    attributes: Union[Dict[str, Any], str] = Field(default_factory=dict)
     current_description: str
-    current_bullets: List[str] | str = Field(default_factory=list)
+    current_bullets: Union[List[str], str] = Field(default_factory=list)
 
     @validator("attributes", pre=True)
     def parse_attributes(cls, value: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
@@ -48,7 +48,7 @@ class ProductInput(BaseModel):
 
 class ProductOutput(BaseModel):
     title: str
-    bullets: List[str]
+    bullets: str  # HTML string format: <li>...</li><li>...</li>
     description: str
     meta_title: str
     meta_description: str
