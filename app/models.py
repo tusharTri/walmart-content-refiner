@@ -1,3 +1,13 @@
+"""
+Pydantic Data Models for Walmart Content Refiner
+
+This module defines the data structures used throughout the application
+for type safety, validation, and API serialization.
+
+Author: Walmart Content Refiner Team
+Version: 1.0.0
+"""
+
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any, Union
 import json

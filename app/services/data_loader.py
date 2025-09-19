@@ -18,7 +18,8 @@ def _safe_parse_json(cell: Any) -> Any:
 
 
 def load_csv(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
+    # Read CSV with proper handling of multiline content
+    df = pd.read_csv(path, quoting=1, escapechar='\\')  # quoting=1 means QUOTE_ALL
     if "attributes" in df.columns:
         df["attributes"] = df["attributes"].apply(_safe_parse_json)
     if "current_bullets" in df.columns:
@@ -27,6 +28,8 @@ def load_csv(path: str) -> pd.DataFrame:
 
 
 def save_csv(df: pd.DataFrame, path: str) -> None:
+    # Replace NaN values with empty strings to avoid issues
+    df = df.fillna("")
     df.to_csv(path, index=False)
 
 

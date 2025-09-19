@@ -2,7 +2,7 @@ import os
 import tempfile
 from typing import Tuple, Dict
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt  # Disabled due to installation issues
 
 
 def generate_report(df: pd.DataFrame) -> Tuple[Dict[str, int], str]:
@@ -15,18 +15,8 @@ def generate_report(df: pd.DataFrame) -> Tuple[Dict[str, int], str]:
             for p in parts:
                 counts[p] = counts.get(p, 0) + 1
 
-    # Create bar chart of top 10
-    top = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:10]
-    labels = [k for k, _ in top]
-    values = [v for _, v in top]
-    plt.figure(figsize=(10, 4))
-    plt.bar(labels, values)
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    work_dir = tempfile.mkdtemp(prefix="report-")
-    chart_path = os.path.join(work_dir, "violations_chart.png")
-    plt.savefig(chart_path)
-    plt.close()
+    # Chart generation disabled due to matplotlib installation issues
+    chart_path = "chart_disabled_due_to_matplotlib_issues"
     return counts, chart_path
 
 

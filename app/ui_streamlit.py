@@ -102,6 +102,6 @@ if uploaded or use_sample:
         
         st.success("✅ All violations fixed! Perfect compliance achieved.")
         st.dataframe(out_df, width='stretch')
-        st.download_button("Download refined CSV", data=out_df.to_csv(index=False).encode('utf-8'), file_name="refined_perfect.csv", mime="text/csv")
+        st.download_button("Download refined CSV", data=out_df.to_csv(index=False).encode('utf-8'), file_name="walmart_compliant_content.csv", mime="text/csv")
 
 

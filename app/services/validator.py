@@ -2,10 +2,10 @@ from typing import List, Optional
 import re
 
 # Banned terms Walmart does not allow
-BANNED_WORDS = ["cosplay", "weapon", "knife", "uv", "premium", "perfect"]
+BANNED_WORDS = ["cosplay", "weapon", "knife", "uv", "premium", "perfect", "outstanding", "remarkable", "superior", "excellent", "exceptional", "amazing", "fantastic", "incredible", "wonderful", "brilliant", "magnificent", "spectacular", "extraordinary", "phenomenal"]
 
 # Regex patterns that indicate medical claims
-MEDICAL_PATTERNS = [r"\bcure\b", r"\btreat\b", r"\bdiagnose\b", r"\bprevent\b"]
+MEDICAL_PATTERNS = [r"\bcure\b", r"\btreat\b", r"\bdiagnose\b", r"\bprevent\b", r"\bheal\b", r"\bsteriliz\b", r"\bgerm-fight\b", r"\bantimicrobial\b", r"\bantibacterial\b", r"\btherapeutic\b", r"\bmedicinal\b", r"\bclinical\b"]
 
 
 def count_words(text: str) -> int:

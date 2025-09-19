@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
 """
-Minimal Walmart Content Refiner - Batch Processor
-Processes CSV files with strict compliance to Walmart rules
+Batch Processing Script for Walmart Content Refiner
+
+This script processes CSV files containing product data and generates
+Walmart-compliant content following strict business rules.
+
+Usage:
+    python process_csv.py input.csv output.csv
+
+Features:
+- Batch processing with progress tracking
+- Comprehensive error handling
+- Detailed logging and compliance reporting
+- Automatic retry logic for perfect compliance
+
+Author: Walmart Content Refiner Team
+Version: 1.0.0
 """
 
 import argparse
@@ -33,6 +47,19 @@ def process_batch(input_file: str, output_file: str):
         # Refine product
         out = refine_product(inp)
         
+        # Debug violations
+        print(f"🔍 Debug: Product {inp.brand} violations: {out.violations}")
+        print(f"🔍 Debug: Violations type: {type(out.violations)}")
+        print(f"🔍 Debug: Violations length: {len(out.violations) if out.violations else 0}")
+        print(f"🔍 Debug: Violations content: {repr(out.violations)}")
+        
+        # Process violations for CSV - ensure it's never empty
+        if out.violations and len(out.violations) > 0:
+            violations_text = "; ".join(out.violations)
+        else:
+            violations_text = "None"
+        print(f"🔍 Debug: Violations text for CSV: {repr(violations_text)}")
+        
         # Collect output
         outputs.append({
             "refined_title": out.title,
@@ -40,7 +67,7 @@ def process_batch(input_file: str, output_file: str):
             "refined_description": out.description,
             "meta_title": out.meta_title,
             "meta_description": out.meta_description,
-            "violations": "; ".join(out.violations),
+            "violations": violations_text,
         })
     
     # Combine with original data
@@ -53,7 +80,8 @@ def process_batch(input_file: str, output_file: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Walmart Content Refiner - Batch Processor")
     parser.add_argument("input", help="Input CSV file")
-    parser.add_argument("output", help="Output CSV file")
+    parser.add_argument("output", nargs="?", default="walmart_compliant_content.csv", 
+                       help="Output CSV file (default: walmart_compliant_content.csv)")
     
     args = parser.parse_args()
     process_batch(args.input, args.output)
