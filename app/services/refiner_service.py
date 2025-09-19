@@ -1,217 +1,243 @@
-from typing import Dict, List, Any
+import os
+import json
+import google.generativeai as genai
+from typing import List, Dict, Any, Optional
 from app.models import ProductInput, ProductOutput
 from app.services import validator
-from app.config import get_logger
+from app.config import get_settings, get_logger
 
+logger = get_logger(__name__)
+settings = get_settings()
 
-def _sanitize_banned(text: str) -> str:
-    t = text or ""
-    for w in validator.BANNED_WORDS:
-        import re
-        t = re.sub(rf"\b{w}\b", "", t, flags=re.IGNORECASE)
-    return " ".join(t.split())
+# Configure Gemini
+if settings.gemini_api_key:
+    genai.configure(api_key=settings.gemini_api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    logger.warning("No Gemini API key found. Using fallback mode.")
+    model = None
 
+# Advanced system prompt for high-quality content generation
+SYSTEM_PROMPT = """You are an expert Walmart Content Refiner AI specializing in e-commerce product descriptions. Your task is to create compelling, compliant, and conversion-optimized content.
 
-def _safe_words(text: str) -> List[str]:
-    return [w for w in (text or "").split() if w]
+CRITICAL COMPLIANCE RULES (MUST FOLLOW):
+1. TITLE: ≤150 characters, MUST contain the brand name naturally
+2. BULLETS: Exactly 8 bullets, each ≤85 characters, format as HTML <li>...</li>
+3. DESCRIPTION: 120-160 words, natural and engaging, MUST contain brand name
+4. META TITLE: ≤70 characters, include brand name
+5. META DESCRIPTION: ≤160 characters, compelling and informative
+6. BANNED WORDS: NEVER use these words (case-insensitive): cosplay, weapon, knife, UV, premium, perfect
+7. ATTRIBUTES: Use ALL provided attributes naturally in description (only once each)
+8. NO MEDICAL CLAIMS: Avoid words like cure, treat, diagnose, prevent, heal, remedy
+9. NATURAL LANGUAGE: Content must sound human-written and engaging
 
+CONTENT QUALITY STANDARDS:
+- Write in active voice with compelling, benefit-focused language
+- Use power words that drive conversions (durable, reliable, efficient, innovative)
+- Create urgency and desire without being pushy
+- Ensure descriptions flow naturally and read well
+- Make bullets scannable and benefit-focused
+- Include specific details and measurements when available
 
-from typing import Optional
+OUTPUT FORMAT:
+Return ONLY valid JSON in this exact structure:
+{
+  "title": "BrandName Product Type - Key Benefit",
+  "bullets": ["<li>Benefit-focused feature 1</li>", "<li>Benefit-focused feature 2</li>", ...],
+  "description": "Compelling 120-160 word description that naturally includes brand name and all attributes...",
+  "meta_title": "BrandName Product Type",
+  "meta_description": "Compelling meta description under 160 characters"
+}
 
+Remember: Quality over speed. Create content that converts and complies with all rules."""
 
-def _ensure_word_count(desc: str, target_min: int = 120, target_max: int = 160, extra_phrases: Optional[List[str]] = None) -> str:
-    words = _safe_words(desc)
-    extra_phrases = extra_phrases or []
-    # pad up to min
-    idx = 0
-    while len(words) < target_min and extra_phrases:
-        phrase_words = _safe_words(extra_phrases[idx % len(extra_phrases)])
-        if not phrase_words:
-            idx += 1
-            if idx > 8 * len(extra_phrases):
-                break
-            continue
-        # add a short phrase but avoid overshooting too much
-        needed = target_min - len(words)
-        words.extend(phrase_words[: max(1, min(len(phrase_words), needed))])
-        idx += 1
-        if idx > 8 * len(extra_phrases):
-            break
-    # trim to max
-    if len(words) > target_max:
-        words = words[:target_max]
-    return " ".join(words)
+def call_gemini_advanced(input_data: ProductInput, violations: List[str] = None, attempt: int = 1) -> Dict[str, Any]:
+    """Call Gemini API with advanced prompting for high-quality content generation"""
+    if not model:
+        logger.error("Gemini model not available")
+        return {}
+    
+    try:
+        # Build concise user prompt to save tokens
+        attributes_text = ""
+        if isinstance(input_data.attributes, dict):
+            attributes_text = ", ".join([f"{k}: {v}" for k, v in input_data.attributes.items()])
+        elif isinstance(input_data.attributes, str):
+            attributes_text = input_data.attributes
+        
+        user_prompt = f"""
+PRODUCT INFORMATION TO REFINE:
+- Brand: {input_data.brand}
+- Product Type: {input_data.product_type}
+- Attributes: {attributes_text}
+- Current Description: {input_data.current_description}
+- Current Bullets: {json.dumps(input_data.current_bullets)}
 
+{f"PREVIOUS VIOLATIONS TO FIX (Attempt {attempt}): {', '.join(violations)}" if violations else ""}
 
-def _gen_attribute_sentences(attrs: Dict[str, Any]) -> List[str]:
-    sentences: list[str] = []
-    for k, v in (attrs or {}).items():
-        value = ", ".join(map(str, v)) if isinstance(v, list) else str(v)
-        if not value:
-            continue
-        sentences.append(f"Includes {k}: {value}.")
-    return sentences
+TASK: Rewrite this content to be Walmart-compliant, conversion-optimized, and engaging. Follow ALL rules strictly.
 
+REQUIREMENTS CHECKLIST:
+✓ Title ≤150 chars with brand name
+✓ Exactly 8 bullets, each ≤85 chars, HTML format
+✓ Description 120-160 words with brand name
+✓ Meta title ≤70 chars
+✓ Meta description ≤160 chars
+✓ No banned words (cosplay/weapon/knife/UV/premium/perfect)
+✓ Use all attributes naturally (once each)
+✓ No medical claims
+✓ Natural, engaging language
 
-def _build_initial_output(inp: ProductInput) -> Dict[str, Any]:
-    brand = inp.brand.strip()
-    base_title = f"{brand} {inp.product_type}".strip()
+{f"FOCUS: Fix these specific issues: {', '.join(violations)}" if violations else "FOCUS: Create perfect, compliant content"}
 
-    # Bullets: prefer current bullets; sanitize, trim, pad to 8; fill from attributes if needed
-    bullets = [b for b in inp.current_bullets if b]
-    bullets = [_sanitize_banned(b)[:85] for b in bullets if _sanitize_banned(b)]
-    attr_bullets: list[str] = []
-    for k, v in (inp.attributes or {}).items():
-        value = ", ".join(map(str, v)) if isinstance(v, list) else str(v)
-        if value:
-            attr_bullets.append(_sanitize_banned(f"{k}: {value}")[:85])
-    for b in attr_bullets:
-        if len(bullets) >= 8:
-            break
-        if b and b not in bullets:
-            bullets.append(b)
-    while len(bullets) < 8:
-        bullets.append("")
-    bullets = bullets[:8]
-
-    # Description: start from current_description; ensure brand present
-    desc = _sanitize_banned(inp.current_description.strip())
-    if brand.lower() not in desc.lower():
-        desc = f"{brand} " + desc
-
-    # Attributes to weave into meta and description
-    keywords: List[str] = []
-    for v in (inp.attributes or {}).values():
-        if isinstance(v, (str, int, float)):
-            keywords.append(str(v))
-        elif isinstance(v, list):
-            keywords.extend([str(x) for x in v])
-        elif isinstance(v, dict):
-            keywords.extend([str(x) for x in v.values()])
-
-    extra_kw = ", ".join(sorted({k for k in keywords if k}))
-    attr_sentences = _gen_attribute_sentences(inp.attributes if isinstance(inp.attributes, dict) else {})
-    if extra_kw and extra_kw.lower() not in desc.lower():
-        desc = desc + f" Features include: {extra_kw}."
-    desc = _ensure_word_count(desc, 120, 160, extra_phrases=attr_sentences)
-
-    # Simple meta
-    meta_title = (base_title)[:70]
-    meta_description = desc[:160]
-
-    return {
-        "title": base_title[:150],
-        "bullets": bullets,
-        "description": desc,
-        "meta_title": meta_title,
-        "meta_description": meta_description,
-        "violations": [],
-    }
-
-
-def _attempt_fix(output: Dict[str, Any], brand: str) -> Dict[str, Any]:
-    # Remove banned words and enforce lengths
-    output["title"] = _sanitize_banned(output.get("title", ""))[:150]
-    if brand and brand.lower() not in output["title"].lower():
-        output["title"] = f"{brand} " + output["title"]
-    output["meta_title"] = _sanitize_banned(output.get("meta_title", ""))[:70]
-    output["meta_description"] = _sanitize_banned(output.get("meta_description", ""))[:160]
-
-    # Bullets
-    bullets = [_sanitize_banned(str(b))[:85] for b in (output.get("bullets") or [])]
-    bullets = bullets[:8]
-    while len(bullets) < 8:
-        bullets.append("")
-    output["bullets"] = bullets
-
-    # Description word count fix towards 130 words
-    desc = _sanitize_banned(output.get("description", ""))
-    if brand and brand.lower() not in desc.lower():
-        desc = f"{brand} " + desc
-    # Use attribute sentences to pad if needed
-    output_attrs = {}
-    desc = _ensure_word_count(desc, 120, 160)
-    output["description"] = desc
-    return output
-
+Return only valid JSON as specified above.
+"""
+        
+        logger.info(f"Calling Gemini for {input_data.brand} (attempt {attempt})")
+        
+        response = model.generate_content(
+            SYSTEM_PROMPT + "\n\n" + user_prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.3 if attempt == 1 else 0.2,  # Lower temperature for retries
+                max_output_tokens=1200,
+                top_p=0.8,
+                top_k=40
+            )
+        )
+        
+        # Extract JSON from response
+        response_text = response.text.strip()
+        
+        # Try to find JSON in the response
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            if json_end > json_start:
+                response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            if json_end > json_start:
+                response_text = response_text[json_start:json_end].strip()
+        
+        # Parse JSON
+        try:
+            result = json.loads(response_text)
+            logger.info(f"Successfully generated content for {input_data.brand} (attempt {attempt})")
+            return result
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing failed (attempt {attempt}): {e}")
+            logger.error(f"Response text: {response_text[:500]}...")
+            return {}
+            
+    except Exception as e:
+        logger.error(f"Gemini API call failed (attempt {attempt}): {e}")
+        return {}
 
 def refine_product(input_data: ProductInput) -> ProductOutput:
-    logger = get_logger()
-    # Initial draft
-    draft = _build_initial_output(input_data)
-
-    # Validate and attempt up to 2 fixes
-    for _ in range(2):
-        violations = validator.validate_product_output(
-            draft, input_keywords=list((input_data.attributes or {}).values()), brand=input_data.brand
+    """Refine product content using advanced Gemini AI with single validation"""
+    logger.info(f"Starting advanced refinement for {input_data.brand} {input_data.product_type}")
+    
+    # Single generation attempt to conserve API tokens
+    draft = call_gemini_advanced(input_data)
+    
+    if not draft:
+        logger.error("Failed to generate initial content")
+        return ProductOutput(
+            title=f"{input_data.brand} {input_data.product_type}",
+            bullets=["<li>Product feature</li>"] * 8,
+            description=f"{input_data.brand} {input_data.product_type} - Product description.",
+            meta_title=f"{input_data.brand} {input_data.product_type}",
+            meta_description=f"{input_data.brand} {input_data.product_type} - Product description.",
+            violations=["Failed to generate content"]
         )
-        if not violations:
-            break
-        draft["violations"] = violations
-        draft = _attempt_fix(draft, input_data.brand)
+    
+    # Single validation attempt to conserve API tokens
+    logger.info(f"Single validation attempt for {input_data.brand}")
+    
+    violations = validator.validate_product_output(
+        draft, 
+        input_keywords=list((input_data.attributes or {}).values()), 
+        brand=input_data.brand
+    )
+    
+    if violations:
+        logger.warning(f"Violations found for {input_data.brand}: {violations}")
+        logger.info("Skipping retries to conserve API tokens")
+    else:
+        logger.info(f"Content validated successfully for {input_data.brand}")
+    
+    # Ensure we have valid structure and fallback content
+    return ProductOutput(
+        title=draft.get("title", f"{input_data.brand} {input_data.product_type}"),
+        bullets=draft.get("bullets", ["<li>Product feature</li>"] * 8),
+        description=draft.get("description", f"{input_data.brand} {input_data.product_type} - Product description."),
+        meta_title=draft.get("meta_title", f"{input_data.brand} {input_data.product_type}"),
+        meta_description=draft.get("meta_description", f"{input_data.brand} {input_data.product_type} - Product description."),
+        violations=violations
+    )
 
-    output = ProductOutput(**{
-        "title": draft.get("title", ""),
-        "bullets": draft.get("bullets", [])[:8],
-        "description": draft.get("description", ""),
-        "meta_title": draft.get("meta_title", "")[:70],
-        "meta_description": draft.get("meta_description", "")[:160],
-        "violations": list(draft.get("violations", [])),
-    })
-    return output
+def fix_output_violations(output_dict: Dict[str, Any], violations: List[str], brand: str) -> Dict[str, Any]:
+    """Fix specific violations in existing output using advanced Gemini prompting"""
+    if not model:
+        logger.error("Gemini model not available for fixing violations")
+        return output_dict
+    
+    try:
+        fix_prompt = f"""
+You have an existing product output with specific violations. Please fix ONLY the specified violations while keeping everything else exactly the same.
 
+CURRENT OUTPUT:
+{json.dumps(output_dict, indent=2)}
 
-def fix_output_violations(original: Dict[str, Any], violations: List[str], brand: str) -> ProductOutput:
-    # Start from original and only fix specified violations
-    draft = {
-        "title": original.get("title", ""),
-        "bullets": list(original.get("bullets", [])),
-        "description": original.get("description", ""),
-        "meta_title": original.get("meta_title", ""),
-        "meta_description": original.get("meta_description", ""),
-        "violations": list(original.get("violations", [])),
-    }
+VIOLATIONS TO FIX: {', '.join(violations)}
 
-    vset = {v.lower() for v in violations}
+Brand: {brand}
 
-    if any("banned" in v for v in vset):
-        draft["title"] = _sanitize_banned(draft["title"]) or draft["title"]
-        draft["meta_title"] = _sanitize_banned(draft["meta_title"]) or draft["meta_title"]
-        draft["meta_description"] = _sanitize_banned(draft["meta_description"]) or draft["meta_description"]
-        draft["description"] = _sanitize_banned(draft["description"]) or draft["description"]
-        draft["bullets"] = [_sanitize_banned(str(b)) for b in draft.get("bullets", [])]
+INSTRUCTIONS:
+1. Fix ONLY the specified violations
+2. Keep all other content unchanged
+3. Maintain the same structure and format
+4. Ensure the fix sounds natural and engaging
+5. Follow all compliance rules
 
-    if any("bullets" in v for v in vset):
-        bs = [str(b)[:85] for b in (draft.get("bullets") or [])][:8]
-        while len(bs) < 8:
-            bs.append("")
-        draft["bullets"] = bs
-
-    if any("description" in v for v in vset):
-        if brand and brand.lower() not in (draft.get("description") or "").lower():
-            draft["description"] = f"{brand} " + (draft.get("description") or "")
-        draft["description"] = _ensure_word_count(draft.get("description") or "", 120, 160)
-
-    if any("meta title" in v for v in vset):
-        draft["meta_title"] = (draft.get("meta_title") or "")[:70]
-    if any("meta description" in v for v in vset):
-        draft["meta_description"] = (draft.get("meta_description") or "")[:160]
-
-    if any("brand" in v for v in vset):
-        if brand and brand.lower() not in (draft.get("title") or "").lower():
-            draft["title"] = f"{brand} " + (draft.get("title") or "")
-        if brand and brand.lower() not in (draft.get("description") or "").lower():
-            draft["description"] = f"{brand} " + (draft.get("description") or "")
-
-    out = ProductOutput(**{
-        "title": draft["title"][:150],
-        "bullets": (draft.get("bullets") or [])[:8],
-        "description": draft.get("description") or "",
-        "meta_title": draft.get("meta_title") or "",
-        "meta_description": draft.get("meta_description") or "",
-        "violations": [],
-    })
-    # Re-validate to capture remaining violations
-    remaining = validator.validate_product_output(out.dict(), None, brand)
-    out.violations = remaining
-    return out
+Return the corrected JSON with the same structure, fixing only the specified violations.
+"""
+        
+        logger.info(f"Fixing violations for {brand}: {violations}")
+        
+        response = model.generate_content(
+            fix_prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.2,
+                max_output_tokens=800,
+                top_p=0.7,
+                top_k=30
+            )
+        )
+        
+        response_text = response.text.strip()
+        
+        # Extract JSON
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            if json_end > json_start:
+                response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            if json_end > json_start:
+                response_text = response_text[json_start:json_end].strip()
+        
+        try:
+            fixed_output = json.loads(response_text)
+            logger.info(f"Successfully fixed violations for {brand}")
+            return fixed_output
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parsing failed for fix: {e}")
+            return output_dict
+            
+    except Exception as e:
+        logger.error(f"Failed to fix violations for {brand}: {e}")
+        return output_dict
