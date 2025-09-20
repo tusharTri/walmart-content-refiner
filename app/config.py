@@ -5,7 +5,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    gemini_api_key: Optional[str] = "AIzaSyAraOParqW53WwvEbA1y35BTWRwqRLx7xk"
+    gemini_api_key: Optional[str] = None
     huggingface_api_key: Optional[str] = None
     cloud_bucket: Optional[str] = None
     gcp_project: Optional[str] = None
