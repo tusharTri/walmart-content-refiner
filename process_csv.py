@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Batch Processing Script for Walmart Content Refiner
+Batch Processing Script for Walmart Content Refiner v3.0
+Author: Tushar Tripathi
 
 This script processes CSV files containing product data and generates
 Walmart-compliant content following strict business rules.
+
+Version 3.0 features improved violation handling with post-processing fixes.
 
 Usage:
     python process_csv.py input.csv output.csv
@@ -13,9 +16,7 @@ Features:
 - Comprehensive error handling
 - Detailed logging and compliance reporting
 - Automatic retry logic for perfect compliance
-
-Author: Walmart Content Refiner Team
-Version: 1.0.0
+Version: 3.0.0
 """
 
 import argparse

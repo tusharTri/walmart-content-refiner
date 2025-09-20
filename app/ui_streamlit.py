@@ -44,7 +44,7 @@ if uploaded or use_sample:
                 "refined_description": out.description,
                 "meta_title": out.meta_title,
                 "meta_description": out.meta_description,
-                "violations": "; ".join(out.violations),
+                "violations": "; ".join(out.violations) if out.violations else "None",
             })
         out_df = pd.concat([df.reset_index(drop=True), pd.DataFrame(outs)], axis=1)
         
@@ -97,10 +97,10 @@ if uploaded or use_sample:
                     meta = meta[:157] + "..."
                 out_df.at[idx, 'meta_description'] = meta
             
-            # Clear violations after fixes
-            out_df.at[idx, 'violations'] = ""
+            # Keep violations as they represent the original AI assessment
+            # Don't clear violations - they show what the AI couldn't fix
         
-        st.success("✅ All violations fixed! Perfect compliance achieved.")
+        st.success("✅ Post-processing fixes applied! Check violations column for remaining issues.")
         st.dataframe(out_df, width='stretch')
         st.download_button("Download refined CSV", data=out_df.to_csv(index=False).encode('utf-8'), file_name="walmart_compliant_content.csv", mime="text/csv")
 

@@ -1,6 +1,16 @@
-# Walmart Content Refiner
+# Walmart Content Refiner v3.0
+
+**Author:** Tushar Tripathi  
+**Version:** 3.0
 
 A comprehensive system for transforming product data into Walmart-compliant content following strict business rules and guidelines.
+
+## 🆕 Version 3.0 Updates
+
+- **Improved violation handling** with post-processing fixes
+- **Enhanced iterative refinement** with automatic violation correction
+- **Better compliance rates** through intelligent retry logic
+- **More efficient API usage** with targeted violation feedback
 
 ## 🎯 Project Overview
 
